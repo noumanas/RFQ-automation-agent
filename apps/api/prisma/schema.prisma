@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Rfq {
+  id             String        @id @default(cuid())
+  source         String
+  rawText        String
+  sender         String
+  attachments    Json          @default("[]")
+  receivedAt     DateTime
+  status         String        @default("pending")
+  createdAt      DateTime      @default(now())
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  parsedSpec     ParsedSpec?
+  quote          Quote?
+}
+
+model Conversation {
+  id             String    @id @default(cuid())
+  channel        String    @default("widget")
+  visitorId      String
+  customerId     String?
+  status         String    @default("bot")
+  needsAttention Boolean   @default(false)
+  staffName      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  messages       Message[]
+  rfqs           Rfq[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  sender         String
+  text           String
+  /// Structured payload for rich rendering (e.g. a quote card) - null for plain text turns.
+  meta           Json?
+  createdAt      DateTime     @default(now())
+}
+
+model ParsedSpec {
+  id         String    @id @default(cuid())
+  rfqId      String    @unique
+  rfq        Rfq       @relation(fields: [rfqId], references: [id])
+  itemRaw    String
+  matchedSku String?
+  quantity   Float?
+  unit       String?
+  spec       String?
+  deadline   DateTime?
+  confidence Json
+  createdAt  DateTime  @default(now())
+}
+
+model Quote {
+  id             String    @id @default(cuid())
+  rfqId          String    @unique
+  rfq            Rfq       @relation(fields: [rfqId], references: [id])
+  priceBreakdown Json
+  confidence     String
+  warnings       Json      @default("[]")
+  message        String
+  status         String    @default("pending_review")
+  sentAt         DateTime?
+  reviewedBy     String?
+  createdAt      DateTime  @default(now())
+}
+
+model Catalog {
+  sku       String   @id
+  name      String
+  aliases   Json      @default("[]")
+  unitPrice Float
+  stockQty  Int
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  phone     String?
+  email     String?
+  name      String?
+  createdAt DateTime @default(now())
+  orders    Order[]
+}
+
+model Order {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  sku        String
+  quantity   Float
+  unitPrice  Float
+  orderedAt  DateTime @default(now())
+}
