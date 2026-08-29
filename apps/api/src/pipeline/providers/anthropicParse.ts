@@ -1,9 +1,9 @@
-import type { Message, Tool, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, PARSING_MODEL } from "../../lib/anthropic.js";
 import { ParsedSpecSchema, type ParsedSpec } from "../../types.js";
 import { PARSE_SYSTEM_PROMPT } from "./prompts.js";
 
-const PARSE_TOOL: Tool = {
+const PARSE_TOOL: Anthropic.Tool = {
   name: "record_parsed_spec",
   description: "Record the structured spec extracted from an RFQ message.",
   input_schema: {
@@ -35,7 +35,7 @@ export async function parseRfqWithAnthropic(rawText: string): Promise<ParsedSpec
     throw new Error("ANTHROPIC_API_KEY is not set - parsing agent cannot run.");
   }
 
-  const response: Message = await anthropic.messages.create({
+  const response = await anthropic.messages.create({
     model: PARSING_MODEL,
     max_tokens: 1024,
     system: PARSE_SYSTEM_PROMPT,
@@ -45,7 +45,7 @@ export async function parseRfqWithAnthropic(rawText: string): Promise<ParsedSpec
   });
 
   const toolUse = response.content.find(
-    (block): block is ToolUseBlock => block.type === "tool_use"
+    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );
   if (!toolUse) throw new Error("Parsing agent did not return structured output.");
 
