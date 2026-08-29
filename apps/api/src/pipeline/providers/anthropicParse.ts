@@ -1,4 +1,4 @@
-import type { Tool, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import type { Message, Tool, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { anthropic, PARSING_MODEL } from "../../lib/anthropic.js";
 import { ParsedSpecSchema, type ParsedSpec } from "../../types.js";
 import { PARSE_SYSTEM_PROMPT } from "./prompts.js";
@@ -35,7 +35,7 @@ export async function parseRfqWithAnthropic(rawText: string): Promise<ParsedSpec
     throw new Error("ANTHROPIC_API_KEY is not set - parsing agent cannot run.");
   }
 
-  const response = await anthropic.messages.create({
+  const response: Message = await anthropic.messages.create({
     model: PARSING_MODEL,
     max_tokens: 1024,
     system: PARSE_SYSTEM_PROMPT,
