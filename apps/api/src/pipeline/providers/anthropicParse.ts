@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type { Tool, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { anthropic, PARSING_MODEL } from "../../lib/anthropic.js";
 import { ParsedSpecSchema, type ParsedSpec } from "../../types.js";
 import { PARSE_SYSTEM_PROMPT } from "./prompts.js";
 
-const PARSE_TOOL: Anthropic.Tool = {
+const PARSE_TOOL: Tool = {
   name: "record_parsed_spec",
   description: "Record the structured spec extracted from an RFQ message.",
   input_schema: {
@@ -45,7 +45,7 @@ export async function parseRfqWithAnthropic(rawText: string): Promise<ParsedSpec
   });
 
   const toolUse = response.content.find(
-    (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+    (block): block is ToolUseBlock => block.type === "tool_use"
   );
   if (!toolUse) throw new Error("Parsing agent did not return structured output.");
 
