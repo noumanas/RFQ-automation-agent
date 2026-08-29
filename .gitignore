@@ -6,3 +6,8 @@ dist/
 .env
 .env.local
 nohup.out
+
+# generated marketing deliverables (pitch deck, social campaign, video) - large binaries, not source
+marketing/
+*.pptx
+*.mp4

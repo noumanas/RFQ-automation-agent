@@ -101,6 +101,13 @@ Set `LLM_PROVIDER` in `.env` to `anthropic` (default) or `gemini` to choose whic
 model runs the parsing (function/tool calling) and drafting stages — see
 `apps/api/src/pipeline/providers/`.
 
+`apps/api`'s `postinstall` runs `prisma generate` automatically after `pnpm
+install`, and `build` runs it again as a defense-in-depth (`prisma generate &&
+tsc`) — without it, `@prisma/client`'s query results fall back to untyped
+`any`, which surfaces as a wall of `TS7006` "implicitly has an 'any' type"
+errors on every `.find`/`.filter`/`.map`/`.reduce`/`.sort` callback touching a
+Prisma result, in a fresh clone or CI environment that never ran it manually.
+
 ## Mock catalog
 
 `apps/api/prisma/seed.ts` generates 140+ catalog items for the "electrical/

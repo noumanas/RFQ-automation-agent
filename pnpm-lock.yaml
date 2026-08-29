@@ -26,7 +26,7 @@ importers:
         specifier: ^0.24.1
         version: 0.24.1
       '@prisma/client':
-        specifier: ^5.20.0
+        specifier: ^5.22.0
         version: 5.22.0(prisma@5.22.0)
       dotenv:
         specifier: ^16.4.5
@@ -48,7 +48,7 @@ importers:
         specifier: ^8.5.13
         version: 8.18.1
       prisma:
-        specifier: ^5.20.0
+        specifier: ^5.22.0
         version: 5.22.0
       tsx:
         specifier: ^4.19.1
