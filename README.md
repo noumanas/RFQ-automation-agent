@@ -101,6 +101,35 @@ Set `LLM_PROVIDER` in `.env` to `anthropic` (default) or `gemini` to choose whic
 model runs the parsing (function/tool calling) and drafting stages — see
 `apps/api/src/pipeline/providers/`.
 
+## Deploying
+
+**`apps/api` does not run on Vercel.** It's a persistent Fastify process with
+long-lived WebSocket connections (`/ws/staff`, `/ws/conversations/:id`) and an
+in-memory pub/sub hub (`lib/hub.ts`) — none of that fits Vercel's stateless,
+per-request serverless model. Deploy it somewhere that runs a normal
+long-lived Node process instead — Railway, Render, and Fly.io all work with
+zero code changes. `apps/web` (the Next.js marketing site + staff console) is
+a normal Next.js app and belongs on Vercel as usual.
+
+**Railway** (recommended): the root `railway.json` is already set up for this
+pnpm monorepo — it installs from the workspace root, then builds/starts only
+`apps/api` via `pnpm --filter api`. To deploy:
+
+1. Create a Railway project from this GitHub repo.
+2. Add a Postgres plugin to the project — it auto-injects `DATABASE_URL` into
+   linked services, so you don't need to provision one separately.
+3. Set the service's environment variables: `LLM_PROVIDER`, and either
+   `ANTHROPIC_API_KEY` or `GEMINI_API_KEY` (+ `GEMINI_MODEL` if overriding the
+   default). `PORT` is injected by Railway automatically — the app already
+   reads `process.env.PORT` and binds `0.0.0.0`, matching Railway's convention.
+4. After the first deploy, run `pnpm --filter api prisma:deploy` (runs `prisma
+   migrate deploy`, the production-safe non-interactive equivalent of
+   `prisma migrate dev`) and `pnpm --filter api db:seed` against the Railway
+   Postgres instance — via `railway run` locally, or a one-off shell in the
+   Railway dashboard.
+5. Point `apps/web`'s `NEXT_PUBLIC_API_URL` (a Vercel env var for that
+   project) at the Railway service's public URL.
+
 `apps/api`'s `postinstall` runs `prisma generate` automatically after `pnpm
 install`, and `build` runs it again as a defense-in-depth (`prisma generate &&
 tsc`) — without it, `@prisma/client`'s query results fall back to untyped
