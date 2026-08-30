@@ -156,6 +156,12 @@ docker build -f apps/web/Dockerfile \
   -t rfqly-web .
 ```
 
+Don't use Cloud Run's console "Continuously deploy from a repository" wizard
+for this — its Dockerfile build option uses a single "source location" as
+*both* the build context and the folder it looks for `Dockerfile` in, so it
+can't express "context = repo root, Dockerfile = apps/api/Dockerfile". Use
+`gcloud builds submit`/`gcloud run deploy` directly, as below.
+
 `NEXT_PUBLIC_API_URL` must be passed as a **build arg**, not a runtime env
 var — Next.js inlines `NEXT_PUBLIC_*` values into the client bundle at build
 time, so the API's Cloud Run URL has to be known before you build the web
@@ -208,16 +214,18 @@ DATABASE_URL="postgresql://postgres:<PASSWORD>@localhost:5432/rfqly" \
   pnpm --filter api db:seed
 ```
 
-**3. Deploy `apps/web`**, pointed at the API URL from step 2:
+**3. Deploy `apps/web`**, pointed at the API URL from step 2. `gcloud builds
+submit --tag` (the shorthand used for `apps/api` above) doesn't support
+`--build-arg`, and `NEXT_PUBLIC_API_URL` has to be baked in at build time, so
+`apps/web` uses a small `cloudbuild.yaml` instead:
 
 ```bash
-gcloud run deploy rfqly-api --region <REGION> --format='value(status.url)'
-# → use that URL as NEXT_PUBLIC_API_URL below
+API_URL=$(gcloud run services describe rfqly-api --region <REGION> --format='value(status.url)')
 
-gcloud builds submit --tag gcr.io/<PROJECT_ID>/rfqly-web -f apps/web/Dockerfile . \
-  --substitutions=_API_URL=https://rfqly-api-xxxxx.run.app
-# (or build+push locally with `docker build --build-arg` as shown above,
-# then `gcloud run deploy rfqly-web --image ...`)
+gcloud builds submit \
+  --config apps/web/cloudbuild.yaml \
+  --substitutions=_NEXT_PUBLIC_API_URL=$API_URL,_IMAGE=gcr.io/<PROJECT_ID>/rfqly-web \
+  .
 
 gcloud run deploy rfqly-web \
   --image gcr.io/<PROJECT_ID>/rfqly-web \
