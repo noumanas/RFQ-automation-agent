@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.next
+.git
+marketing
+*.pptx
+*.mp4
+nohup.out
+.DS_Store

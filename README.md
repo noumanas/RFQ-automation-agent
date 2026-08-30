@@ -137,6 +137,100 @@ tsc`) — without it, `@prisma/client`'s query results fall back to untyped
 errors on every `.find`/`.filter`/`.map`/`.reduce`/`.sort` callback touching a
 Prisma result, in a fresh clone or CI environment that never ran it manually.
 
+### Alternative: Google Cloud (Cloud Run + Cloud SQL)
+
+Both apps can run entirely on GCP instead of Railway/Vercel. `apps/api` still
+needs a persistent process (Cloud Run supports this — unlike Vercel — since it
+runs a real container and keeps WebSocket connections open for up to 60
+minutes), so this is the one part that isn't zero-config:
+
+**Dockerfiles**: `apps/api/Dockerfile` and `apps/web/Dockerfile` are
+multi-stage pnpm-workspace builds. Build context must be the **repo root**
+(both Dockerfiles copy sibling `package.json` files to resolve the workspace),
+not the app subfolder:
+
+```bash
+docker build -f apps/api/Dockerfile -t rfqly-api .
+docker build -f apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL=https://<your-api-run-url> \
+  -t rfqly-web .
+```
+
+`NEXT_PUBLIC_API_URL` must be passed as a **build arg**, not a runtime env
+var — Next.js inlines `NEXT_PUBLIC_*` values into the client bundle at build
+time, so the API's Cloud Run URL has to be known before you build the web
+image (a chicken-and-egg step: deploy `apps/api` first, then build `apps/web`
+with that URL).
+
+**1. Cloud SQL (Postgres)**
+
+```bash
+gcloud sql instances create rfqly-db --database-version=POSTGRES_15 \
+  --tier=db-f1-micro --region=<REGION>
+gcloud sql databases create rfqly --instance=rfqly-db
+gcloud sql users set-password postgres --instance=rfqly-db --password=<PASSWORD>
+```
+
+Note the instance connection name (`gcloud sql instances describe rfqly-db
+--format='value(connectionName)'`) — it looks like
+`PROJECT_ID:REGION:rfqly-db`.
+
+**2. Deploy `apps/api`** (build via Cloud Build, no local Docker needed):
+
+```bash
+gcloud builds submit --tag gcr.io/<PROJECT_ID>/rfqly-api -f apps/api/Dockerfile .
+
+gcloud run deploy rfqly-api \
+  --image gcr.io/<PROJECT_ID>/rfqly-api \
+  --region <REGION> \
+  --allow-unauthenticated \
+  --min-instances=1 --max-instances=1 \
+  --add-cloudsql-instances=<PROJECT_ID>:<REGION>:rfqly-db \
+  --set-env-vars="LLM_PROVIDER=anthropic,ANTHROPIC_API_KEY=<KEY>" \
+  --set-env-vars="DATABASE_URL=postgresql://postgres:<PASSWORD>@localhost/rfqly?host=/cloudsql/<PROJECT_ID>:<REGION>:rfqly-db"
+```
+
+`--min-instances=1 --max-instances=1` is **required**, not just a cold-start
+optimization: `lib/hub.ts` is an in-memory, single-process pub/sub hub, so the
+live chat/staff-takeover WebSockets only stay consistent if exactly one
+instance is ever running. Scaling this beyond one instance later means
+swapping the hub for Redis pub/sub first.
+
+After the first deploy, run migrations + seed against Cloud SQL — easiest via
+the [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/sql-proxy)
+locally:
+
+```bash
+cloud-sql-proxy <PROJECT_ID>:<REGION>:rfqly-db &
+DATABASE_URL="postgresql://postgres:<PASSWORD>@localhost:5432/rfqly" \
+  pnpm --filter api prisma:deploy
+DATABASE_URL="postgresql://postgres:<PASSWORD>@localhost:5432/rfqly" \
+  pnpm --filter api db:seed
+```
+
+**3. Deploy `apps/web`**, pointed at the API URL from step 2:
+
+```bash
+gcloud run deploy rfqly-api --region <REGION> --format='value(status.url)'
+# → use that URL as NEXT_PUBLIC_API_URL below
+
+gcloud builds submit --tag gcr.io/<PROJECT_ID>/rfqly-web -f apps/web/Dockerfile . \
+  --substitutions=_API_URL=https://rfqly-api-xxxxx.run.app
+# (or build+push locally with `docker build --build-arg` as shown above,
+# then `gcloud run deploy rfqly-web --image ...`)
+
+gcloud run deploy rfqly-web \
+  --image gcr.io/<PROJECT_ID>/rfqly-web \
+  --region <REGION> \
+  --allow-unauthenticated
+```
+
+`apps/api`'s CORS is already `origin: true` (reflects any request origin), so
+no server-side change is needed for the Cloud Run web URL to reach it.
+
+**Custom domain**: `gcloud run domain-mappings create --service rfqly-web
+--domain <your-domain>` once you own one.
+
 ## Mock catalog
 
 `apps/api/prisma/seed.ts` generates 140+ catalog items for the "electrical/
